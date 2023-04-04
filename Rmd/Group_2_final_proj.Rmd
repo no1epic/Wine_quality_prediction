@@ -1,0 +1,321 @@
+---
+title: "Factors affecting wines Quality"
+author: "Group_2"
+date: '2023-03-27'
+output: html_document
+---
+#Importing all the libraries needed for the project
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(ggcorrplot)
+library(e1071)
+library(matrixStats)
+library(randomForest) 
+library(caret)
+```
+
+# Loading the data sets
+```{r}
+white_wine = read.csv(file="/Users/sahilgawande/Downloads/white_wines.csv", sep=";")
+red_wine = read.csv(file="/Users/sahilgawande/Downloads/red_wines.csv", sep=";")
+```
+
+#combining data set
+```{r}
+red_wine$type <- "red"
+white_wine$type <- "white"
+wine_data <- rbind(red_wine, white_wine)
+```
+
+#Checking for data summary
+```{r}
+str(wine_data)
+summary(wine_data)
+```
+
+#plotting the scores
+```{r}
+ggplot(wine_data, aes(x = quality)) +
+  geom_bar(fill = "steelblue") +
+  facet_wrap(~type) +
+  labs(title = "Distribution of Wine Quality Scores", x = "Quality", y = "Count") +
+  theme_minimal()
+```
+
+#Scatter PLot
+```{r}
+pairs(wine_data[,1:11], 
+      main = "Scatterplot Matrix of Wine Data",
+      col = ifelse(wine_data$type == "red", "red", "blue"),
+      pch = 20)
+```
+#Correlation Matrix
+#Using library to plot the correlation matrix
+```{r}
+
+cor_matrix <- cor(wine_data[,1:11])
+print(cor_matrix)
+
+corrplot <- ggcorrplot(cor_matrix,
+                       method = "circle",
+                       type = "lower",
+                       lab = TRUE,
+                       lab_size = 3,
+                       title = "Correlation Heatmap",
+                       colors = c("blue", "white", "red"),
+                       legend.title = "Correlation")
+print(corrplot)
+```
+
+# Check if there are any missing valuse
+# Margins to make the labes visible
+```{r}
+sum(is.na(wine_data))
+
+par(mar=c(8,3,1,1))
+```
+
+# Box-and-Whisker plot
+```{r}
+boxplot(wine_data[,1:11], las=2)
+```
+
+# Loading the data sets
+```{r}
+white_wine = read.csv(file="/Users/sahilgawande/Downloads/white_wines.csv", sep=";")
+red_wine = read.csv(file="/Users/sahilgawande/Downloads/red_wines.csv", sep=";")
+```
+
+#SVM for White_Wines 
+```{r}
+df=white_wine
+categories = character()
+
+for(i in 1:nrow(df)){
+  if(df$quality[i]<5){
+    categories[i] = 'Bad'
+  }else if(df$quality[i]>=5 & df$quality[i]<7){
+    categories[i] = 'Good'
+  }else
+    categories[i] = 'Excellent'
+}
+
+df$quality = categories
+head(df)
+table(df$quality)
+```
+```{r}
+
+df = as.data.frame(df)
+df$quality = as.factor(df$quality)
+set.seed(160)
+counter = sample(1:nrow(df), size = 0.8*nrow(df))
+TrainSet = df[counter,]
+TestSet = df[-counter,]
+nrow(TrainSet)
+nrow(TestSet)
+
+svmControl = trainControl(method = 'cv', number = 10,
+                          search = 'grid'
+)
+
+svmGrid = expand.grid(Gamma = 10^seq(-2,2,0.01), Cost = 10^seq(-2,2,0.01))
+
+ModelSvm = train(quality~., data = TrainSet, method = 'svmRadial',
+                 tune.Grid = svmGrid,
+                 trControl = svmControl )
+White_Svm = predict(ModelSvm, TestSet)
+confusionMatrix(White_Svm, TestSet$quality)
+
+```
+
+#Random Forest for white wines
+# Train a Random Forest model
+# Predict the test set using the Random Forest model
+# Create a confusion matrix and Print the confusion matrix
+```{r}
+
+library(randomForest)
+
+model_rf <- randomForest(quality ~ ., data = TrainSet)
+
+predictions_rf <- predict(model_rf, TestSet)
+
+cm_rf <- confusionMatrix(predictions_rf, TestSet$quality)
+print(cm_rf)
+```
+
+# Calculate the accuracy of the Random Forest model
+```{r}
+
+accuracy_rf <- cm_rf$overall["Accuracy"]
+cat("Random Forest Accuracy:", accuracy_rf)
+```
+
+# Print the column names of the importance matrix
+# Extract variable importance data
+# Create a ggplot2 variable importance plot
+```{r}
+print(colnames(model_rf$importance))
+
+
+importance_data <- data.frame(Variable = row.names(model_rf$importance),
+                              Importance = model_rf$importance[, "MeanDecreaseGini"])
+
+
+ggplot(importance_data, aes(x = reorder(Variable, Importance), y = Importance, fill = Importance)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Variable Importance in the Random Forest Model",
+       x = "Variable",
+       y = "Importance",
+       fill = "Importance") +
+  scale_fill_gradient(low = "blue", high = "red")
+
+```
+
+## Load nnet for multi- class classification for white wines
+```{r}
+library(ROCR)
+library("nnet")
+logistic_model <- multinom(quality~., data = TrainSet)
+```
+
+## Load library CARET (Classification & REgression Training)
+```{r}
+library(caret)
+myControl <- trainControl(method = 'cv', number = 10, search = 'grid')
+white_grid <- expand.grid(decay = seq(0,1,0.02))
+
+logistic_cv = train(quality~., data = TrainSet, method = 'multinom', 
+              trControl = myControl,
+              tuneGrid = white_grid)
+```
+
+#Accuracy of logistic regression and multinomial logistis regression model for white wines
+```{r}
+LRM_pred <- predict(logistic_model, TestSet)
+confusionMatrix(LRM_pred, TestSet$quality)
+```
+
+```{r}
+Mlrm_pred <- predict(logistic_cv, TestSet)
+confusionMatrix(Mlrm_pred, TestSet$quality)
+```
+
+#SVM for Red wines
+```{r}
+
+df=red_wine
+categories = character()
+
+for(i in 1:nrow(df)){
+  if(df$quality[i]<5){
+    categories[i] = 'Bad'
+  }else if(df$quality[i]>=5 & df$quality[i]<7){
+    categories[i] = 'Good'
+  }else
+    categories[i] = 'Excellent'
+}
+
+df$quality = categories
+head(df)
+table(df$quality)
+
+```
+
+
+```{r}
+df = as.data.frame(df)
+df$quality = as.factor(df$quality)
+set.seed(160)
+indis = sample(1:nrow(df), size = 0.8*nrow(df))
+TrainSet = df[indis,]
+TestSet = df[-indis,]
+nrow(TrainSet)
+nrow(TestSet)
+
+svmControl = trainControl(method = 'cv', number = 10,
+                          search = 'grid'
+)
+
+svmGrid = expand.grid(Gamma = 10^seq(-2,2,0.01), Cost = 10^seq(-2,2,0.01))
+
+ModelSvm = train(quality~., data = TrainSet, method = 'svmRadial',
+                 tune.Grid = svmGrid,
+                 trControl = svmControl )
+
+
+TahminSvm = predict(ModelSvm, TestSet)
+confusionMatrix(TahminSvm, TestSet$quality)
+```
+
+#Random Forest for red wines
+```{r}
+model_rf <- randomForest(quality ~ ., data = TrainSet)
+
+predictions_rf <- predict(model_rf, TestSet)
+
+cm_rf <- confusionMatrix(predictions_rf, TestSet$quality)
+print(cm_rf)
+```
+#Accuracy
+```{r}
+accuracy_rf <- cm_rf$overall["Accuracy"]
+cat("Random Forest Accuracy:", accuracy_rf)
+```
+
+#Feature Importance for Random Forest
+```{r}
+
+print(colnames(model_rf$importance))
+
+importance_data <- data.frame(Variable = row.names(model_rf$importance),
+                              Importance = model_rf$importance[, "MeanDecreaseGini"])
+
+ggplot(importance_data, aes(x = reorder(Variable, Importance), y = Importance, fill = Importance)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Variable Importance in the Random Forest Model",
+       x = "Variable",
+       y = "Importance",
+       fill = "Importance") +
+  scale_fill_gradient(low = "blue", high = "red")
+
+```
+
+## Load nnet for multi- class classification for red wines
+```{r}
+library(ROCR)
+library("nnet")
+logistic_model <- multinom(quality~., data = TrainSet)
+```
+
+## Load library CARET (Classification & REgression Training) for red wines
+```{r}
+library(caret)
+myControl <- trainControl(method = 'cv', number = 10, search = 'grid')
+white_grid <- expand.grid(decay = seq(0,1,0.02))
+
+logistic_cv = train(quality~., data = TrainSet, method = 'multinom', 
+              trControl = myControl,
+              tuneGrid = white_grid)
+```
+
+#Accuracy of logistic regression and multinomial logistis regression model for red wines
+```{r}
+LRM_pred <- predict(logistic_model, TestSet)
+confusionMatrix(LRM_pred, TestSet$quality)
+```
+
+```{r}
+Mlrm_pred <- predict(logistic_cv, TestSet)
+confusionMatrix(Mlrm_pred, TestSet$quality)
+```
+
+
